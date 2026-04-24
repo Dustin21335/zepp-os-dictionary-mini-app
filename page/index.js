@@ -66,8 +66,6 @@ Page(
       hmUI.createWidget(hmUI.widget.IMG, {
         x: (deviceInfo.width - px(65)), 
         y: px(95),
-        w: px(60),
-        h: px(60),
         src: "searchicon.png"
       }).addEventListener(hmUI.event.CLICK_DOWN, startSearch);
       statusWidget = hmUI.createWidget(hmUI.widget.TEXT, {

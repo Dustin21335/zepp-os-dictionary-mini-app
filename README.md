@@ -4,4 +4,4 @@
 
 QR-code to install the mini app (version 1.0.0):
 
-![QR-code to install the mini app](https://r2.e-z.host/bce09183-46dd-443f-a56b-8002b2ac8e39/9hje3lnc.png)
+![QR-code to install the mini app](https://r2.e-z.host/bce09183-46dd-443f-a56b-8002b2ac8e39/4nu2w4vt.png)
