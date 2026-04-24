@@ -7,7 +7,8 @@ import { setWakeUpRelaunch } from "@zos/display";
 
 const deviceInfo = getDeviceInfo();
 const logger = log.getLogger("dictionary");
-let textWidget;
+let inputWidget;
+let statusWidget;
 let wordWidget;
 let pronunciationWidget;
 let definitionWidget;
@@ -15,19 +16,26 @@ let definitionWidget;
 Page(
   BasePage({
     state: {},
-    onInit(){
-      setWakeUpRelaunch({relaunch: true});
-    },
     build() {
       const openKeyboard = () => {
         hmUI.createKeyboard({
           inputType: hmUI.inputType.CHAR,
-          text: textWidget?.getProperty(hmUI.prop.TEXT) || "",
+          text: inputWidget?.getProperty(hmUI.prop.TEXT) || "",
           onComplete: (kb, result) => {
-            textWidget.setProperty(hmUI.prop.TEXT, result?.data || "");
+            inputWidget.setProperty(hmUI.prop.TEXT, result?.data || "");
             hmUI.deleteKeyboard();
           },
         });
+      };
+      const startSearch = async () => {
+        let word = inputWidget.getProperty(hmUI.prop.TEXT);
+        if (word && word != wordWidget.getProperty(hmUI.prop.TEXT)) {
+            statusWidget.setProperty(hmUI.prop.TEXT, "");
+            wordWidget.setProperty(hmUI.prop.TEXT, "Loading");
+            pronunciationWidget.setProperty(hmUI.prop.TEXT, "");
+            definitionWidget.setProperty(hmUI.prop.TEXT, "");
+          this.getWordDefinition();
+        }
       };
       hmUI.createWidget(hmUI.widget.FILL_RECT, {
         x: px(10), 
@@ -37,7 +45,7 @@ Page(
         color: 0x333333,
         radius: px(12)
       }).addEventListener(hmUI.event.CLICK_DOWN, openKeyboard); 
-      textWidget = hmUI.createWidget(hmUI.widget.TEXT, {
+      inputWidget = hmUI.createWidget(hmUI.widget.TEXT, {
           x: px(20),  
           y: px(90),
           w: px(280),
@@ -46,22 +54,31 @@ Page(
           text: "",
           color: 0xFFFFFF,
       });
-      textWidget.addEventListener(hmUI.event.CLICK_DOWN, openKeyboard);
-      hmUI.createWidget(hmUI.widget.BUTTON, {
+      inputWidget.addEventListener(hmUI.event.CLICK_DOWN, openKeyboard);
+      hmUI.createWidget(hmUI.widget.FILL_RECT, {
         x: (deviceInfo.width - px(70)), 
         y: px(90),
         w: px(60),
         h: px(60),
-        text_size: px(36),
-        radius: px(12),
-        normal_color: 0x333333,
-        press_color: 0x222222,
-        text: "🔍"
-      }).addEventListener(hmUI.event.CLICK_DOWN, async () =>{
-        let word = textWidget.getProperty(hmUI.prop.TEXT);
-        if (word && word != wordWidget.getProperty(hmUI.prop.TEXT)) {
-          this.getWordDefinition();
-        }
+        color: 0x333333,
+        radius: px(12)
+      }).addEventListener(hmUI.event.CLICK_DOWN, startSearch); 
+      hmUI.createWidget(hmUI.widget.IMG, {
+        x: (deviceInfo.width - px(65)), 
+        y: px(95),
+        w: px(60),
+        h: px(60),
+        src: "searchicon.png"
+      }).addEventListener(hmUI.event.CLICK_DOWN, startSearch);
+      statusWidget = hmUI.createWidget(hmUI.widget.TEXT, {
+        x: px(20),
+        y: px(160),
+        w: deviceInfo.width - px(40),
+        h: px(60),
+        text_size: px(40),
+        text: "",
+        color: 0xFFFFFF,
+        text_style: hmUI.text_style.WRAP,
       });
       wordWidget = hmUI.createWidget(hmUI.widget.TEXT, {
         x: px(20),
@@ -75,7 +92,7 @@ Page(
       });
       pronunciationWidget = hmUI.createWidget(hmUI.widget.TEXT, {
         x: px(20),
-        y: px(200),
+        y: px(210),
         w: deviceInfo.width - px(40),
         h: px(60),
         text_size: px(20),
@@ -87,7 +104,7 @@ Page(
         x: px(20),
         y: px(255),
         w: deviceInfo.width - px(40),
-        h: px(2000),
+        h: px(60),
         text_size: px(25),
         text: "",
         color: 0xFFFFFF,
@@ -96,15 +113,24 @@ Page(
       hmUI.createWidget(hmUI.widget.PAGE_SCROLLBAR);
     },
     getWordDefinition() {
-      this.request({
-        method: "GetWordDefinition",
-        params: {
-          word: textWidget.getProperty(hmUI.prop.TEXT),
-        },
-      }).then((data) => {
+      const word = inputWidget.getProperty(hmUI.prop.TEXT);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timed out")), 10000)
+      );
+      Promise.race([
+        this.request({
+          method: "GetWordDefinition",
+          params: { word },
+        }),
+        timeoutPromise
+      ]).then((data) => {
           const result = data?.result;
+          if (result === "ERROR") {
+            throw new Error("Request failed");
+          }
           if (result?.title === "No Definitions Found" || !Array.isArray(result) || !result.length) {
-            wordWidget.setProperty(hmUI.prop.TEXT, "No definition found");
+            statusWidget.setProperty(hmUI.prop.TEXT, "No definition found");
+            wordWidget.setProperty(hmUI.prop.TEXT, "");
             pronunciationWidget.setProperty(hmUI.prop.TEXT, "");
             definitionWidget.setProperty(hmUI.prop.TEXT, "");
             return;
@@ -124,8 +150,24 @@ Page(
           wordWidget.setProperty(hmUI.prop.TEXT, entry.word);
           pronunciationWidget.setProperty(hmUI.prop.TEXT, entry.phonetic || entry.phonetics?.find((p) => p.text)?.text);
           definitionWidget.setProperty(hmUI.prop.TEXT, definitionsText);
+          definitionWidget.setProperty(hmUI.prop.H, hmUI.getTextLayout(definitionsText, {
+            text_size: px(25),
+            text_width: deviceInfo.width - px(40),
+            wrapped: 1
+          }).height);
       }).catch((error) => {
-        logger.error("ERROR", error);
+          logger.error("ERROR", error);
+          let message = `Error ${error?.message || ""}`;
+          statusWidget.setProperty(hmUI.prop.TEXT, message);
+          statusWidget.setProperty(hmUI.prop.H, hmUI.getTextLayout(message, {
+            text_size: px(40),
+            text_width: deviceInfo.width - px(40),
+            wrapped: 1
+          }).height);
+          wordWidget.setProperty(hmUI.prop.TEXT, "");
+          pronunciationWidget.setProperty(hmUI.prop.TEXT, "");
+          definitionWidget.setProperty(hmUI.prop.TEXT, "");
+          definitionWidget.setProperty(hmUI.prop.H, 60);
       });
     }
   })

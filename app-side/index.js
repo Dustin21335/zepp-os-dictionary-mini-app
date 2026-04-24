@@ -11,7 +11,9 @@ async function getWordDefinition(word, res) {
     });
   } catch (error) {
     res(null, {
-      result: "ERROR",
+      result: {
+        error: error?.message || "Unknown error"
+      },
     });
   }
 }
